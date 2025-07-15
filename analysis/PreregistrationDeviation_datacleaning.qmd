@@ -1,0 +1,106 @@
+---
+title: "Data cleaning"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Setup
+
+```{r, warning=FALSE, message=FALSE}
+# Load packages
+library(foreign)
+library(tidyverse)
+library(here)
+
+# Load custom functions
+script_files <- list.files(here::here("R"), pattern = "\\.R$", full.names = TRUE)
+purrr::walk(script_files, source)
+```
+
+# Load data
+
+```{r, message=FALSE}
+source <- read_csv(here::here("data/source/source_2024-03-30.csv"))
+```
+
+# Removing Qualtrics labels
+
+```{r}
+label <-
+  source |> 
+  slice(1:2)
+
+source <- 
+  source |> 
+  slice(-(1:2))
+```
+
+# Exploring drop-outs
+
+We are excluding participants who did not finished the survey. We will not share the data of these participants as promised by the consent informed form.
+
+Define completed participants.
+
+```{r}
+dropouts <- source |> 
+  dplyr::filter(!(Progress > 97 & consent == "Yes"))
+```
+
+Remove metadata columns (adjust as needed). Assume your question columns start at e.g. column 10 (change accordingly).
+
+```{r}
+question_cols <- dropouts |> 
+  dplyr::select(10:ncol(dropouts))
+```
+
+Apply function to each dropout.
+
+```{r}
+dropout_points <- apply(question_cols, 1, find_dropout_point)
+```
+
+Get frequencies.
+
+```{r}
+dropout_freq <- table(factor(dropout_points, levels = colnames(question_cols)))
+print(dropout_freq)
+```
+
+# Exclusions 
+
+We exclude everyone who completed less than 98% of the survey.
+Participants who completed 98% answered all questions, but did not click the submit button.
+
+```{r}
+source <-
+  source |> 
+  dplyr::mutate(
+    Progress = as.numeric(as.character(Progress))
+  )
+
+source_filtered <- 
+  source |> 
+  dplyr::filter(Progress > 97 & consent == "Yes")
+```
+
+# Select needed columns
+
+We drop the columns that contain free text since it is possible that the respondents are identifiable by the comments.
+
+```{r}
+processed <-
+  source_filtered |> 
+  dplyr::select(c(4:26,28,30:32,34,36:38,40,42:45,47,49:53,55,57:59,61:63,66))
+```
+
+# Save processed data
+
+```{r}
+write_csv(processed, here::here("data/processed/PreregistrationDeviation_processed_data.csv"))
+
+label |> 
+  dplyr::select(c(4:26,28,30:32,34,36:38,40,42:45,47,49:53,55,57:59,61:63,66)) |> 
+  write_csv(here::here("data/processed/PreregistrationDeviation_processed_labels.csv"))
+```
+

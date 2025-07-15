@@ -1,0 +1,1005 @@
+---
+title: "Analysis"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Setup
+
+```{r, warning=FALSE, message=FALSE}
+# Load packages
+library(tidyverse)
+library(here)
+library(ggstats)
+library(ggdist)
+library(reshape2)
+
+# Load custom functions
+script_files <- list.files(here::here("R"), pattern = "\\.R$", full.names = TRUE)
+purrr::walk(script_files, source)
+```
+
+# Load data
+
+```{r, warning=FALSE, message=FALSE}
+dat <- read_csv(here::here("data/processed/PreregistrationDeviation_processed_data.csv"))
+```
+
+# Descriptives/group memberships
+
+## Survey duration (in minutes)
+
+```{r}
+dat$duration_min <- as.numeric(dat$`Duration (in seconds)`) / 60 #transform to minutes
+mean(dat$duration_min); sd(dat$duration_min)
+median(dat$duration_min) 
+min(dat$duration_min); max(dat$duration_min)
+```
+
+## Experience with preregistration
+
+```{r}
+# Frequency of different responses for the experience with preregistration question
+table(dat$prereg_experience)
+
+# Number of missing responses for the experience with preregistration question
+sum(is.na(dat$prereg_experience))
+```
+
+## Experience with deviation from preregistration (only for those with experience with prereg, n = 630)
+
+```{r}
+table(dat$dev_experience)
+```
+
+## Explored experiences reporting discrepancies (only for yes with deviation, n = 377)
+
+```{r}
+table(dat$report_experience)
+```
+
+## Training with preregistration
+
+```{r}
+# Frequency of diffeent responses for the training preregistration question
+table(dat$training)
+
+# Number of missing responses for the training preregistration question
+sum(is.na(dat$training))
+```
+
+# Expected Consequences when Deviating from Preregistration
+## Numerical analysis for Q10 (does this make sense for a three-point scale?,
+
+We assume equal distances.
+
+```{r}
+dat$group_member <- ifelse(dat$prereg_experience == "No", 0, 
+                           ifelse(dat$prereg_experience == "Yes" & dat$dev_experience == "Yes", 2, 1))
+dat$group <- ifelse(dat$group_member == 0, "No experience",
+                    ifelse(dat$group_member == 1, "Preregistration", "Preregistration and Deviation"))
+```
+
+* 0: no experience with preregistration
+* 1: experience preregistration, not deviation
+* 2: experience with preregistration and deviation
+
+```{r}
+dat$report_consequences_1_num <- ifelse(dat$report_consequences_1 == "less", -1,
+                                        ifelse(dat$report_consequences_1 == "more", 1, 0))
+dat$report_consequences_2_num <- ifelse(dat$report_consequences_2 == "less", -1,
+                                        ifelse(dat$report_consequences_2 == "more", 1, 0))
+dat$report_consequences_3_num <- ifelse(dat$report_consequences_3 == "less", -1,
+                                        ifelse(dat$report_consequences_3 == "more", 1, 0))
+```
+
+```{r}
+desc_pub1 <- as.data.frame(as.matrix(aggregate(report_consequences_1_num ~ group, data = dat, 
+                                               function(x) c(n = NROW(x), mean = round(mean(x),2), 
+                                                             sd = round(sd(x),2)))))
+colnames(desc_pub1) <- c("group", "n", "mean", "sd")
+desc_pub1$mean <- as.numeric(desc_pub1$mean)
+desc_pub1$sd <- as.numeric(desc_pub1$sd)
+desc_pub1$group <- c("No exp", "Pre", "P+D")
+
+desc_cred2 <- as.data.frame(as.matrix(aggregate(report_consequences_2_num ~ group, data = dat, 
+                        function(x) c(n = NROW(x), mean = round(mean(x),2), 
+                                      sd = round(sd(x),2)))))
+colnames(desc_cred2) <- c("group", "n", "mean", "sd")
+desc_cred2$mean <- as.numeric(desc_cred2$mean)
+desc_cred2$sd <- as.numeric(desc_cred2$sd)
+desc_cred2$group <- c("No exp", "Pre", "P+D")
+
+desc_trust3 <- as.data.frame(as.matrix(aggregate(report_consequences_3_num ~ group, data = dat, 
+                         function(x) c(n = NROW(x), mean = round(mean(x),2), 
+                                       sd = round(sd(x),2)))))
+colnames(desc_trust3) <- c("group", "n", "mean", "sd")
+desc_trust3$mean <- as.numeric(desc_trust3$mean)
+desc_trust3$sd <- as.numeric(desc_trust3$sd)
+desc_trust3$group <- c("No exp", "Pre", "P+D")
+```
+
+## Counts publication chances
+
+```{r}
+table(dat$report_consequences_1)/nrow(dat)
+```
+
+# Impact of deviations on personal reputation 
+## Report on expected reputution consequences of deviating from preregistration
+
+We calculate the results for people with experience with preregistration (Q6) and those that have no experience with preregistration (Q9.3), and also on reputation consequences of not reporting deviations for those that had experience with deviations (Q8) (mean, sd, maybe some visualisation).
+
+```{r}
+table(dat$group, dat$dev_reputation_1)
+table(dat$group, dat$prereg_barriers_3)
+```
+
+Descriptives for comparison Q6/Q9.3.
+Descriptives for Q8.
+
+Q6:
+
+```{r}
+dat$dev_reputation_1_num <- ifelse(dat$dev_reputation_1 == "I agree", 4,
+                                   ifelse(dat$dev_reputation_1 == "I rather agree", 3,
+                                          ifelse(dat$dev_reputation_1 == "I rather don't agree", 2,
+                                                 ifelse(dat$dev_reputation_1 == "I don't agree", 1, NA))))
+```
+
+Q9.C/Q9.3:
+
+```{r}
+dat$prereg_barriers_3_num <- ifelse(dat$prereg_barriers_3 == "I agree", 4,
+                                    ifelse(dat$prereg_barriers_3 == "I rather agree", 3,
+                                           ifelse(dat$prereg_barriers_3 == "I rather don't agree", 2,
+                                                  ifelse(dat$prereg_barriers_3 == "I don't agree", 1, NA))))
+```
+
+0 = I don't know, remove from analyses
+
+Q8.1 & Q8.2:
+
+```{r}
+dat$report_reputation_1_num <- ifelse(dat$report_reputation_1 == "I agree", 4,
+                                      ifelse(dat$report_reputation_1  == "I rather agree", 3,
+                                             ifelse(dat$report_reputation_1  == "I rather don't agree", 2,
+                                                    ifelse(dat$report_reputation_1  == "I don't agree", 1, NA))))
+dat$report_reputation_2_num <- ifelse(dat$report_reputation_2 == "I agree", 4,
+                                      ifelse(dat$report_reputation_2  == "I rather agree", 3,
+                                             ifelse(dat$report_reputation_2  == "I rather don't agree", 2,
+                                                    ifelse(dat$report_reputation_2  == "I don't agree", 1, NA))))
+```
+
+## Experience with preregistration and deviation
+
+```{r}
+mean(dat$dev_reputation_1_num, na.rm = TRUE); sd(dat$dev_reputation_1_num, na.rm = TRUE); (nrow(dat) - sum(is.na(dat$dev_reputation_1_num)))
+```
+
+## No experience
+
+```{r}
+mean(dat$prereg_barriers_3_num, na.rm = TRUE); sd(dat$prereg_barriers_3_num, na.rm = TRUE); (nrow(dat) - sum(is.na(dat$prereg_barriers_3_num)))
+```
+
+Q8:
+
+```{r}
+mean(dat$report_reputation_1_num, na.rm = TRUE); sd(dat$report_reputation_1_num, na.rm = TRUE)
+mean(dat$report_reputation_2_num, na.rm = TRUE); sd(dat$report_reputation_2_num, na.rm = TRUE)
+```
+
+## Plots
+
+Creating the dataset for the figure.
+
+```{r}
+data_repplot <- rbind(
+  data.frame(
+    `Reputation Response` = dat$dev_reputation_1,
+    group = "Experience with preregistration and deviation"
+  ),
+  data.frame(
+    `Reputation Response` = dat$prereg_barriers_3,
+    group = "No experience with preregistration and deviation"
+  )
+)
+
+data_repplot <- data_repplot[complete.cases(data_repplot), ]
+ 
+colnames(data_repplot) <- c("Response", "Experience")
+```
+
+Order values.
+
+```{r}
+data_repplot$`Response` <- factor(
+  data_repplot$`Response`,
+  levels = c("I don't agree", "I rather don't agree", "I rather agree", "I agree"),
+  ordered = TRUE
+)
+
+
+data_repplot$Experience <- factor(
+  data_repplot$Experience,
+  levels = c(
+    "No experience with preregistration and deviation",
+    "Experience with preregistration and deviation"
+  ),
+  labels = c(
+    "No experience with\npreregistration and deviation",
+    "Experience with\npreregistration and deviation"
+  )
+)
+```
+
+Creating the plot.
+
+```{r}
+custom_label <- function(x) {
+  p <- scales::percent(x, accuracy = 1)
+  p[x < .075] <- ""
+  p
+}
+
+# Generate levels (otherwise it'll show na on the legend)
+response_levels <- c(
+  "I don't agree",
+  "I rather don't agree",
+  "I rather agree",
+  "I agree"
+)
+
+likert_colors <- c(
+  "I don't agree" = "#CD7F32",
+  "I rather don't agree" = "#DDC3A9",
+  "I rather agree" = "#99D0CD",
+  "I agree" = "#03A89E"
+)
+
+# Set factor with only these levels
+data_repplot$Response <- factor(
+  data_repplot$Response,
+  levels = response_levels
+)
+
+png(here("figures/stackedbar_reputation_numbs2.png"), width = 4000, height = 1500, res = 300)
+ggplot(data_repplot) +
+  aes(y = Experience, fill = Response) +
+  geom_bar(position = position_likert(cutoff = 2)) +
+  geom_text(
+    aes(by = Response, label = custom_label(after_stat(prop))),
+    stat = "prop",
+    position = position_likert(vjust = 0.5),
+    size = 4
+  ) +
+  scale_x_continuous(label = label_percent_abs()) +
+  scale_fill_manual(
+    values = likert_colors,
+    na.translate = FALSE  # this hides NA from the legend
+  ) +
+  labs(
+    x = "Proportion",
+    y = NULL,
+    # title = "Perceived Influence of Deviation on Professional Reputation by Experience"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 14),
+    legend.title = element_blank()
+    # plot.title = element_text(size = 16, hjust = 0.5)
+  )
+
+dev.off()
+
+rm(data_repplot)
+```
+
+# Preceived trust/cred 
+## Credibility and trustworthiness
+
+We make variables numeric (and merged over conditions).
+
+```{r}
+dat$crediblestudy <- as.numeric(ifelse(dat$scenario_version == "A", dat$assessed_cr_tr_a_1,
+                                       ifelse(dat$scenario_version == "B", dat$assessed_cr_tr_b_1,
+                                              ifelse(dat$scenario_version == "C", dat$assessed_cr_tr_c_1,
+                                                     dat$assessed_cr_tr_d_1))))
+dat$trustworthyauthor <- as.numeric(ifelse(dat$scenario_version == "A", dat$assessed_cr_tr_a_2,
+                                           ifelse(dat$scenario_version == "B", dat$assessed_cr_tr_b_2,
+                                                  ifelse(dat$scenario_version == "C", dat$assessed_cr_tr_c_2,
+                                                         dat$assessed_cr_tr_d_2))))
+```
+
+## Means and SDs for the entire sample
+
+```{r}
+desc.cred <- aggregate(crediblestudy ~ scenario_version, data = dat, 
+                       function(x) c(n = NROW(x), mean = round(mean(x),2), sd = round(sd(x),2)))
+desc.trust <- aggregate(trustworthyauthor ~ scenario_version, data = dat, 
+                        function(x) c(n = NROW(x), mean = round(mean(x),2), sd = round(sd(x),2)))
+```
+
+## Factors that determine cred/trust
+
+Code that requires text data is commented out. Thus code merged the text responses into one variable.
+
+```{r}
+dat$cred_factors <- ifelse(dat$scenario_version == "A", dat$cr_factors_a,
+                           ifelse(dat$scenario_version == "B", dat$cr_factors_b,
+                                  ifelse(dat$scenario_version == "C", dat$cr_factors_c,
+                                         dat$cr_factors_d)))
+#dat$cred_factors_text <- ifelse(dat$scenario_version == "A", dat$cr_factors_a_9_TEXT,
+#                                ifelse(dat$scenario_version == "B", dat$cr_factors_b_9_TEXT,
+#                                       ifelse(dat$scenario_version == "C", dat$cr_factors_c_9_TEXT,
+#                                              dat$cr_factors_d_9_TEXT)))
+dat$trust_factors <- ifelse(dat$scenario_version == "A", dat$tr_factors_a,
+                            ifelse(dat$scenario_version == "B", dat$tr_factors_b,
+                                   ifelse(dat$scenario_version == "C", dat$tr_factors_c,
+                                          dat$tr_factors_d)))
+#dat$trust_factors_text <- ifelse(dat$scenario_version == "A", dat$tr_factors_a_9_TEXT,
+#                                 ifelse(dat$scenario_version == "B", dat$tr_factors_b_9_TEXT,
+#                                        ifelse(dat$scenario_version == "C", dat$tr_factors_c_9_TEXT,
+#                                               dat$tr_factors_d_9_TEXT)))
+```
+
+## Seperate text data for factors that contribute to credibility
+
+```{r}
+strings <- dat$cred_factors
+```
+
+## Step 1: Split each string into elements
+
+```{r}
+split_strings <- strsplit(strings, ",")
+```
+
+## Step 2: Extract all unique elements
+
+```{r}
+all_elements <- unique(unlist(split_strings))
+```
+
+## Step 3: Ensure "sample size" is always the first column
+
+```{r}
+all_elements <- c("sample size", setdiff(all_elements, "sample size"))
+```
+
+## Step 4: Create a dataframe with exactly nine columns
+
+```{r}
+max_columns <- 9
+extra_columns <- if (length(all_elements) < max_columns) {
+  paste0("Extra", seq_len(max_columns - length(all_elements)))
+} else {
+  character(0)
+}
+columns <- c(all_elements, extra_columns)[1:max_columns]
+result.cred <- data.frame(matrix(NA, nrow = length(strings), ncol = max_columns))
+colnames(result.cred) <- columns
+```
+
+## Step 5: Populate the dataframe
+
+```{r}
+for (i in seq_along(split_strings)) {
+  elements <- split_strings[[i]]
+  for (element in elements) {
+    if (element %in% colnames(result.cred)) {
+      result.cred[i, element] <- element
+    }
+  }
+}
+
+rm(all_elements, columns, element, elements, extra_columns, i, max_columns, strings)
+
+nrow(result.cred)
+counts_cred <- colSums(!is.na(result.cred))
+perc_cred <- round((counts_cred / nrow(result.cred)) * 100,1)
+factors.cred <- cbind(counts_cred, perc_cred)
+rm(counts_cred, perc_cred)
+```
+
+# Trustworthiness
+
+```{r}
+strings <- dat$trust_factors
+```
+
+## Step 1: Split each string into elements
+
+```{r}
+split_strings <- strsplit(strings, ",")
+```
+
+## Step 2: Extract all unique elements
+
+```{r}
+all_elements <- unique(unlist(split_strings))
+```
+
+## Step 3: Ensure "sample size" is always the first column
+
+```{r}
+all_elements <- c("sample size", setdiff(all_elements, "sample size"))
+```
+
+## Step 4: Create a dataframe with exactly nine columns
+
+```{r}
+max_columns <- 9
+extra_columns <- if (length(all_elements) < max_columns) {
+  paste0("Extra", seq_len(max_columns - length(all_elements)))
+} else {
+  character(0)
+}
+columns <- c(all_elements, extra_columns)[1:max_columns]
+result.trust <- data.frame(matrix(NA, nrow = length(strings), ncol = max_columns))
+colnames(result.trust) <- columns
+```
+
+## Step 5: Populate the dataframe
+
+```{r}
+for (i in seq_along(split_strings)) {
+  elements <- split_strings[[i]]
+  for (element in elements) {
+    if (element %in% colnames(result.trust)) {
+      result.trust[i, element] <- element
+    }
+  }
+}
+
+nrow(result.trust)
+count_trust <- colSums(!is.na(result.trust))
+perc_trust <- round((count_trust / nrow(result.trust)) * 100,1)
+factors.trust <- cbind(count_trust, perc_trust)
+
+rm(all_elements, columns, element, elements, extra_columns, i, max_columns, strings, count_trust, perc_trust)
+
+dat$group <- ifelse(dat$group_member == 0, "No experience",
+                    ifelse(dat$group_member == 1, "Preregistration", "Preregistration and Deviation"))
+group <- unique(dat$group)
+```
+
+## Correlation for entire sample
+
+```{r}
+cor(dat$trustworthyauthor, dat$crediblestudy)
+```
+
+## Correlations per group
+
+```{r}
+correlations <- dat %>%
+  group_by(group) %>%
+  summarise(correlation = cor(trustworthyauthor, crediblestudy))
+
+print(correlations)
+```
+
+# Plots trustworthiness/credibility
+
+## Prepare the long-format data
+
+```{r}
+dat_long <- dat %>%
+  select(group, scenario_version, crediblestudy, trustworthyauthor) %>%
+  pivot_longer(cols = c(crediblestudy, trustworthyauthor),
+               names_to = "RatingType", values_to = "Rating") %>%
+  filter(!is.na(Rating)) %>%
+  mutate(
+    group = factor(group, levels = c("No experience", "Preregistration", "Preregistration and Deviation")),
+    Scenario = factor(scenario_version, levels = c("A", "B", "C", "D")),
+    RatingType = ifelse(RatingType == "crediblestudy", "Credibility", "Trustworthiness")
+  )
+```
+
+## Define mellow likert-style scenario colors + custom labels
+
+```{r}
+scenario_colors <- c(
+  "Scenario A\n(not prereg., no deviation)" = "#CD7F32",
+  "Scenario B\n(prereg., no deviation)"     = "#DDC3A9",
+  "Scenario C\n(prereg., deviation)"        = "#99D0CD",
+  "Scenario D\n(not prereg., deviation)"    = "#03A89E"
+)
+```
+
+## Relabel scenarios
+
+```{r}
+dat_long$Scenario <- recode_factor(dat_long$Scenario,
+                                   A = "Scenario A\n(not prereg., no deviation)",
+                                   B = "Scenario B\n(prereg., no deviation)",
+                                   C = "Scenario C\n(prereg., deviation)",
+                                   D = "Scenario D\n(not prereg., deviation)"
+)
+```
+
+## Plot
+
+```{r}
+png(here("figures/scenarios2.png"), width = 3000, height = 3000, res = 300)
+ggplot(dat_long, aes(x = Scenario, y = Rating, fill = Scenario, color = Scenario)) +
+  stat_halfeye(adjust = 0.5, width = 0.6, .width = 0, justification = -0.2,
+               point_colour = NA, alpha = 0.7) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.5,
+               position = position_nudge(x = 0.1)) +
+  geom_jitter(aes(color = Scenario), size = 1, width = 0.08, alpha = 0.5) +
+  scale_fill_manual(values = scenario_colors, name = "Scenario") +
+  scale_color_manual(values = scenario_colors, guide = "none") +
+  facet_grid(group ~ RatingType)+
+  theme_minimal(base_size = 14) +
+  labs(
+    # title = "Perceived Credibility and Trustworthiness by Scenario and Experience",
+    x = NULL,
+    y = "Rating"
+  ) +
+  theme(
+    legend.position = "right",
+    legend.text = element_text(size = 11),
+    legend.title = element_blank(),
+    axis.text.x = element_blank(),
+    strip.text = element_text(size = 13)
+    # plot.title = element_text(size = 16, hjust = 0.5)
+  )
+dev.off()
+```
+
+# Barplots factors cred/trust
+
+## Dataset
+
+```{r}
+counts_cred_group <- sapply(split(result.cred, dat$group), 
+                            function(results.cred) colSums(!is.na(results.cred))) # Andrea you removed this before
+counts_cred_group <- as.data.frame(counts_cred_group)
+
+counts_trust_group <- sapply(split(result.trust, dat$group), 
+                             function(results.trust) colSums(!is.na(results.trust)))
+counts_trust_group <- as.data.frame(counts_trust_group)
+# Convert matrices to data frames
+cred_long <- as.data.frame(counts_cred_group) %>%
+  tibble::rownames_to_column("Item") %>%
+  pivot_longer(-Item, names_to = "Experience", values_to = "Count") %>%
+  mutate(Dimension = "Credibility")
+
+trust_long <- as.data.frame(counts_trust_group) %>%
+  tibble::rownames_to_column("Item") %>%
+  pivot_longer(-Item, names_to = "Experience", values_to = "Count") %>%
+  mutate(Dimension = "Trustworthiness")
+combined_long <- bind_rows(cred_long, trust_long)
+combined_long$Item <- factor(combined_long$Item)
+```
+
+## Colors
+
+```{r}
+custom_colors <- c(
+    "#006D67",  "#039B95", "#03A89E", "#6FC5C3",  
+    "#BFDCDC", "#DDC3A9", "#C8997B", "#C8995A", "#CD7F32" 
+  )
+
+```
+
+## Assign 9 colors manually (ensure order matches levels of Item)
+
+```{r}
+item_levels <- levels(combined_long$Item)
+item_colors <- setNames(custom_colors[1:length(item_levels)], item_levels)
+```
+
+## Summarize total count per Dimension
+
+```{r}
+item_totals <- combined_long %>%
+  group_by(Dimension, Item) %>%
+  summarise(total = sum(Count), .groups = "drop")
+```
+
+## Merge totals and bar end positions
+
+```{r}
+plot_data <- combined_long %>%
+  group_by(Dimension, Item) %>%
+  summarise(Count = sum(Count), .groups = "drop") %>%
+  group_by(Dimension) %>%
+  arrange(Dimension, Item) %>%
+  mutate(
+    x_start = lag(cumsum(Count), default = 0),
+    x_end = x_start + Count,
+    x_mid = x_start + Count / 2
+  ) %>%
+  ungroup()
+```
+
+## Plot
+
+```{r}
+png(here("figures/groupedbar_factors_credtrust2.png"), width = 4000, height = 1500, res = 300)
+
+ggplot(plot_data, aes(x = Count, y = Dimension, fill = Item)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(
+    aes(label = Count),
+    stat = "identity",
+    position = position_stack(vjust = 0.5),  # Center in the stack
+    size = 4,
+    color = "black"
+  ) +
+  scale_fill_manual(values = item_colors) +
+  labs(
+    # title = "Factors Contributing to Perceived Credibility and Trustworthiness",
+    x = "Number of responses",
+    y = NULL,
+    fill = "Item"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 14),
+    legend.position = "right"
+    # plot.title = element_text(size = 16, hjust = 0.5)
+  )
+dev.off()
+```
+
+# For supplementary materials 
+## Summarize for each Experience
+
+```{r}
+plot_data_split <- combined_long %>%
+  group_by(Dimension, Item, Experience) %>%
+  summarise(Count = sum(Count), .groups = "drop")
+```
+
+## Set factor levels for consistent facet order
+
+```{r}
+plot_data_split$Experience <- factor(
+  plot_data_split$Experience,
+  levels = c("No experience", "Preregistration", "Preregistration and Deviation")
+)
+```
+
+## Plot
+
+```{r}
+png(here("figures/groupedbar_factors_credtrust_by_experience.png"), width = 4000, height = 1800, res = 300)
+
+ggplot(plot_data_split, aes(x = Count, y = Dimension, fill = Item)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(
+    aes(label = Count),
+    stat = "identity",
+    position = position_stack(vjust = 0.5),
+    size = 3.8,
+    color = "black"
+  ) +
+  scale_fill_manual(values = item_colors) +
+  facet_wrap(~Experience, ncol = 1) +
+  labs(
+    # title = "Factors Contributing to Perceived Credibility and Trustworthiness by Experience",
+    x = "Number of responses",
+    y = NULL,
+    fill = "Item"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_text(size = 14),
+    legend.position = "right",
+    # plot.title = element_text(size = 16, hjust = 0.5),
+    strip.text = element_text(size = 13)
+  )
+
+dev.off()
+
+```
+
+# Commonality of Deviations
+
+```{r}
+dat$group <- ifelse(dat$group_member == 0, "No experience",
+                    ifelse(dat$group_member == 1, "Preregistration", "Preregistration and Deviation"))
+```
+
+## RQ 3.1
+## Q17.1 - Q17.3
+
+```{r}
+dat$practices_perception_1 <- as.numeric(dat$practices_perception_1)
+dat$practices_perception_2 <- as.numeric(dat$practices_perception_2)
+dat$practices_perception_3 <- as.numeric(dat$practices_perception_3)
+```
+
+## Entire sample
+
+```{r}
+mean(dat$practices_perception_1, na.rm = TRUE); sd(dat$practices_perception_1, na.rm = TRUE); sum(is.na(dat$practices_perception_1))
+mean(dat$practices_perception_2, na.rm = TRUE); sd(dat$practices_perception_2, na.rm = TRUE); sum(is.na(dat$practices_perception_2))
+mean(dat$practices_perception_3, na.rm = TRUE); sd(dat$practices_perception_3, na.rm = TRUE); sum(is.na(dat$practices_perception_3))
+```
+
+## Subgroups
+
+```{r}
+desc_perception1 <- as.data.frame(as.matrix(aggregate(practices_perception_1 ~ group, data = dat, 
+                              function(x) c(n = NROW(x), mean = round(mean(x),2), sd = round(sd(x),2)))))
+colnames(desc_perception1) <- c("group", "n", "mean", "sd")
+desc_perception1$mean <- as.numeric(desc_perception1$mean)
+desc_perception1$sd <- as.numeric(desc_perception1$sd)
+desc_perception1$group <- c("No exp", "Pre", "P+D")
+
+desc_perception2 <- as.data.frame(as.matrix(aggregate(practices_perception_2 ~ group, data = dat, 
+                              function(x) c(n = NROW(x), mean = round(mean(x),2), sd = round(sd(x),2)))))
+colnames(desc_perception2) <- c("group", "n", "mean", "sd")
+desc_perception2$mean <- as.numeric(desc_perception2$mean)
+desc_perception2$sd <- as.numeric(desc_perception2$sd)
+desc_perception2$group <- c("No exp", "Pre", "P+D")
+
+desc_perception3 <- as.data.frame(as.matrix(aggregate(practices_perception_3 ~ group, data = dat, 
+                              function(x) c(n = NROW(x), mean = round(mean(x),2), sd = round(sd(x),2)))))
+colnames(desc_perception3) <- c("group", "n", "mean", "sd")
+desc_perception3$mean <- as.numeric(desc_perception3$mean)
+desc_perception3$sd <- as.numeric(desc_perception3$sd)
+desc_perception3$group <- c("No exp", "Pre", "P+D")
+```
+
+# Seperate strings (cultural factors)
+
+```{r}
+strings <- dat$requirement
+```
+
+## Step 1: Split each string into elements
+
+```{r}
+split_strings <- strsplit(strings, ",")
+```
+
+## Step 2: Extract all unique elements
+
+```{r}
+all_elements <- unique(unlist(split_strings))
+```
+
+## Step 3: Ensure "sample size" is always the first column
+
+```{r}
+all_elements <- c("my PI or collaborators.", setdiff(all_elements, "my PI or collaborators."))
+```
+
+## Step 4: Create a dataframe with exactly five columns
+
+```{r}
+max_columns <- 5
+extra_columns <- if (length(all_elements) < max_columns) {
+  paste0("Extra", seq_len(max_columns - length(all_elements)))
+} else {
+  character(0)
+}
+columns <- c(all_elements, extra_columns)[1:max_columns]
+result.requirement <- data.frame(matrix(NA, nrow = length(strings), ncol = max_columns))
+colnames(result.requirement) <- columns
+```
+
+## Step 5: Populate the dataframe
+
+```{r}
+for (i in seq_along(split_strings)) {
+  elements <- split_strings[[i]]
+  for (element in elements) {
+    if (element %in% colnames(result.requirement)) {
+      result.requirement[i, element] <- element
+    }
+  }
+}
+```
+
+## Code adjusted to exclude text responses
+
+```{r}
+dat.requirement <- cbind(dat$group, result.requirement)#, dat$requirement_5_TEXT)
+
+counts.requirement <- matrix(NA, ncol = 4, nrow = 5)
+colnames(counts.requirement) <- c("Variable", "No experience", "Preregistration", "Preregistration and Deviation")
+
+for (col in 2:6) {
+  column_name <- colnames(dat.requirement)[col]
+  counts.requirement[col-1, 1] <- column_name
+  
+  # Calculate and print the table for the current column
+  tab <- table(dat.requirement$`dat$group`, dat.requirement[[column_name]])
+  counts.requirement[col-1, 2:4] <- tab
+}
+```
+
+# Guidance
+
+```{r}
+strings <- dat$guidance
+```
+
+## Step 1: Split each string into elements
+
+```{r}
+split_strings <- strsplit(strings, ",")
+```
+
+## Step 2: Extract all unique elements
+
+```{r}
+all_elements <- unique(unlist(split_strings))
+```
+
+## Step 3: Ensure "sample size" is always the first column
+
+```{r}
+all_elements <- c("my PI or collaborators.", setdiff(all_elements, "my PI or collaborators."))
+```
+
+## Step 4: Create a dataframe with exactly five columns
+
+```{r}
+max_columns <- 5
+extra_columns <- if (length(all_elements) < max_columns) {
+  paste0("Extra", seq_len(max_columns - length(all_elements)))
+} else {
+  character(0)
+}
+columns <- c(all_elements, extra_columns)[1:max_columns]
+result.guidance <- data.frame(matrix(NA, nrow = length(strings), ncol = max_columns))
+colnames(result.guidance) <- columns
+```
+
+## Step 5: Populate the dataframe
+
+```{r}
+for (i in seq_along(split_strings)) {
+  elements <- split_strings[[i]]
+  for (element in elements) {
+    if (element %in% colnames(result.guidance)) {
+      result.guidance[i, element] <- element
+    }
+  }
+}
+```
+
+## Code adjusted to exclude text responses
+
+```{r}
+dat.guidance <- cbind(dat$group, result.guidance)#, dat$guidance_5_TEXT)
+
+
+counts.guidance <- matrix(NA, ncol = 4, nrow = 5)
+colnames(counts.guidance) <- c("Variable", "No experience", "Preregistration", "Preregistration and Deviation")
+
+for (col in 2:6) {
+  column_name <- colnames(dat.guidance)[col]
+  counts.guidance[col-1, 1] <- column_name
+  
+  # Calculate and print the table for the current column
+  tab <- table(dat.guidance$`dat$group`, dat.guidance[[column_name]])
+  counts.guidance[col-1, 2:4] <- tab
+}
+```
+
+# Bar plots for requirement
+## Barplot for requirement
+
+```{r}
+dat_require_melt <- melt(counts.requirement, id.vars = c("Variable"))
+dat_require_melt
+
+dat_require_melt$Var1 <- ifelse(dat_require_melt$Var1 == 1, "My PI or collaborators.",
+                                ifelse(dat_require_melt$Var1 == 2, "None", 
+                                       ifelse(dat_require_melt$Var1 == 3, "Else",
+                                              ifelse(dat_require_melt$Var1 == 4, "Funder",
+                                                     "Journal"))))
+dat_require_melt <- dat_require_melt[6:20,]
+dat_require_melt$value <- as.numeric(dat_require_melt$value)
+colnames(dat_require_melt) <- c("Factor", "Experience", "Count")
+```
+
+# Guidance
+## Barplot for guidance
+
+```{r}
+dat_guidance_melt <- melt(counts.guidance, id.vars = c("Variable"))
+dat_guidance_melt
+
+dat_guidance_melt$Var1 <- ifelse(dat_guidance_melt$Var1 == 1, "My PI or collaborators.",
+                                 ifelse(dat_guidance_melt$Var1 == 2, "None", 
+                                        ifelse(dat_guidance_melt$Var1 == 3, "Else",
+                                               ifelse(dat_guidance_melt$Var1 == 4, "Funder",
+                                                      "Journal"))))
+dat_guidance_melt <- dat_guidance_melt[6:20,]
+dat_guidance_melt$value <- as.numeric(dat_guidance_melt$value)
+colnames(dat_guidance_melt) <- c("Factor", "Experience", "Count")
+```
+
+# Barplots for require and guidance reporting 
+
+```{r}
+dat_guidance_melt$Source <- "Guidance with Reporting Deviations"
+dat_require_melt$Source <- "Requires Reporting Deviations"
+combined_faceted_data <- bind_rows(dat_guidance_melt, dat_require_melt)
+combined_faceted_data$Factor <- factor(
+  combined_faceted_data$Factor,
+  levels = c("Funder", "Journal", "My PI or collaborators.", "Else", "None")
+)
+
+custom_colors <- c("#CD7F32", "#DDC3A9", "#99D0CD", "#03A89E", "#006D67")
+```
+
+## Make sure levels are consistently ordered
+
+```{r}
+dat_guidance_melt$Factor <- factor(dat_guidance_melt$Factor, levels = c("Funder", "Journal", "My PI or collaborators.", "Else", "None"))
+
+png(here("figures/stackedbar_norms2.png"), width = 4000, height = 1500, res = 300)
+
+ggplot(combined_faceted_data, aes(y = Experience, x = Count, fill = Factor)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = custom_colors) +
+  facet_wrap(~Source, ncol = 1) +  # vertically stacked facets
+  labs(
+    # title = "Factors Involved in Reporting Deviations",
+    x = "Number of Responses",
+    y = NULL,
+    fill = "Factor"
+  ) +
+  geom_text(
+    aes(label = Count),
+    position = position_stack(vjust = 0.5),
+    size = 5,
+    color = "black"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.text = element_text(size = 14),
+    axis.text.y = element_text(size = 12),
+    legend.position = "right",
+    legend.text = element_text(size = 12)
+    # plot.title = element_text(size = 16, hjust = 0.5)
+  )
+dev.off()
+```
+
+# Text responses guidance/requiring
+
+Here we converted missing responses from -99 to NA, only reproducible with text data. 
+Text data are available upon request. 
+
+```{r}
+#requirement_text <- ifelse(dat$requirement_5_TEXT == "-99", NA, dat$requirement_5_TEXT)
+#guidance_text <- ifelse(dat$guidance_5_TEXT == "-99", NA, dat$guidance_5_TEXT)
+```
+
+# Norms
+## Norms at institution
+
+total sample:
+
+```{r}
+table(dat$norms)
+round(table(dat$norms)/nrow(dat)*100,1) #percentages
+sum(is.na(dat$norms)) # number of missing responses
+```
+
+per subgroup:
+
+```{r}
+n.groups <- table(dat$group)
+groupcounts_norms <- as.data.frame(table(dat$group,dat$norms))
+groupcounts_norms$percentage <- round(ifelse(groupcounts_norms$Var1 == "No experience", 
+                                             groupcounts_norms$Freq / n.groups[[1]] *100,
+                                             ifelse(groupcounts_norms$Var1 == "Preregistration",
+                                                    groupcounts_norms$Freq / n.groups[[2]] *100,
+                                                    groupcounts_norms$Freq / n.groups[[3]] *100)),1)
+```
+
